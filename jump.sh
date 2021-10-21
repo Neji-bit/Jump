@@ -168,9 +168,11 @@ add() {
   _LINE="${_NICKNAME} `readlink -f ${_NEWPATH}`"
   [[ -n "$_COMMENT" ]] && _LINE="${_LINE} # $_COMMENT"
   echo "${_LINE}" >> ${JUMP_LIST}
-  sed -e "s/#.*//" ${JUMP_LIST} | column -t > ${tmpfile_l}
-  sed -e "s/^[^#]*//" ${JUMP_LIST}> ${tmpfile_r}
-  paste -d\  ${tmpfile_l} ${tmpfile_r} | column -t -s# -o# | sed -e "s/[[:space:]]*#\?[[:space:]]*$//" > ${JUMP_LIST}
+  format
+  return 0
+}
+
+format() {
   return 0
 }
 

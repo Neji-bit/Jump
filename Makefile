@@ -27,3 +27,8 @@ cleanup:
 	@rm -f ~/.jump_modified
 	@echo "Cleanup was successful."
 
+unit_test:
+	@cd ./test && bash ./test.sh
+
+test: unit_test
+

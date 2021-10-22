@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="0.00.01"
+VERSION="0.00.02"
 
 set -e
 MUTE=true
@@ -8,10 +8,6 @@ MUTE=true
 # Tempfile & cleanup trap.
 trap 'cleanup && log "Exit." 1>&2' 0
 trap 'log "Catch a Signal" 1>&2' 1 2 3 15
-log () {
-  [[ -z "$MUTE" ]] && echo $@
-  return 0
-}
 cleanup () {
   [[ -n ${tmpfile_l-} ]] && rm -f "$tmpfile_l"
   [[ -n ${tmpfile_r-} ]] && rm -f "$tmpfile_r"
@@ -20,6 +16,12 @@ cleanup () {
 }
 tmpfile_l=$(mktemp "/tmp/${0##*/}.tmp.XXXXXX")
 tmpfile_r=$(mktemp "/tmp/${0##*/}.tmp.XXXXXX")
+
+# For maintenance. This log function references MUTE environment.
+log () {
+  [[ -z "$MUTE" ]] && echo $@
+  return 0
+}
 
 # Long-option support.
 # Before the getopts process, overwrite long-options with short-options.
@@ -58,14 +60,18 @@ opts() {
   done
   return 0
 }
+opts ${REGULAR_ARGS[@]}
+shift $((OPTIND - 1))   # Discard options from buffer.
 
-# Main code.
+# Functions. These functions are paired with options.
 
+# --version
 version() {
   echo "Version: ${VERSION}" 1>&2
   return 0
 }
 
+# --usage
 usage() {
   cat << EOT 1>&2
   Usage:
@@ -110,37 +116,50 @@ EOT
   return 0
 }
 
-opts ${REGULAR_ARGS[@]}
-shift $((OPTIND - 1))
-
-
-_check_list() {
-  local _JUMP_LIST=$1
-  if [ -r "${_JUMP_LIST}" ]; then
-    return 0
-  else
-    echo "Error: The file ${JUMP_FILE} was not exist." 1>&2
-    return 1
-  fi
-}
-
-_trim() {
-  local _JUMP_LIST=$1
-  sed -e "s/[[:space:]]\+/ /g" -e "s/^[[:space:]]*//g" -e "s/[[:space:]]*$//g" $_JUMP_LIST
-}
-
+# --list
 list() {
-  local _JUMP_LIST=$1
-  cat ${_JUMP_LIST}
+  local _BOOKMARK_FILE=$1
+  cat ${_BOOKMARK_FILE}
   return $?
 }
 
+# --back
+back() {
+  if [ -n "$JUMP_BACK" ]; then  # "JUMP_BACK" is a ENV.
+    pwd > $BACKPATH_WORKFILE
+    echo -n "$JUMP_BACK" > $CDPATH_WORKFILE
+  fi
+  return 0
+}
+
+# --add
+add() {
+  local _NICKNAME=$1 && [[ -n "${_NICKNAME}" ]] && shift
+  local _NEWPATH=$1 && [[ -n "${_NEWPATH}" ]] && shift
+  local _COMMENT="$*"
+  local _LINE=
+  [[ -z "${_NEWPATH}" ]] && _NEWPATH=`pwd`
+  [[ -z "${_NICKNAME}" || -z "${_NEWPATH}" ]] && echo "Error: Add requires a double param of nickname and path." 1>&2 && return 1
+  _LINE="${_NICKNAME} `_absolute_path ${_NEWPATH}`"
+  [[ -n "$_COMMENT" ]] && _LINE="${_LINE} # $_COMMENT"
+  echo "${_LINE}" >> ${BOOKMARK_FILE}
+  _auto_format
+  return 0
+}
+
+# --modified
+modified() {
+  echo "true" >> ${MODIFIED_WORKFILE}
+  return 0
+}
+
+# jump to (= no option).
 jump() {
-  local _JUMP_LIST=$1
+  local _BOOKMARK_FILE=$1
   local _JUMP_TO=$2
-  local _TO_PATH=`_trim ${JUMP_LIST} | grep "^${_JUMP_TO}" | cut -d\  -f 2`
+  local _TO_PATH=`_trim ${BOOKMARK_FILE} | grep "^${_JUMP_TO}" | cut -d\  -f 2`
   [[ -z "$_TO_PATH" ]] && exit 1
-  [[ 1 -ne `echo "${_TO_PATH}" | wc -w` ]] && grep "^${_JUMP_TO}" ${_JUMP_LIST} && exit 1
+  [[ 1 -ne `echo "${_TO_PATH}" | wc -w` ]] && grep "^${_JUMP_TO}" ${_BOOKMARK_FILE} && exit 1
   if [ -n "${FLAG_P}" ]; then
     echo "$_TO_PATH"
   else
@@ -150,39 +169,39 @@ jump() {
   return 0
 }
 
-back() {
-  if [ -n "$JUMP_BACK" ]; then
-    pwd > $BACKPATH_WORKFILE
-    echo -n "$JUMP_BACK" > $CDPATH_WORKFILE
+# The following are local functions.
+
+_auto_format() {
+  # T.B.D.
+  return 0
+}
+
+_exist_listfile() {
+  local _BOOKMARK_FILE=$1
+  if [ -r "${_BOOKMARK_FILE}" ]; then
+    return 0
+  else
+    echo "Error: The file ${JUMP_FILE} was not exist." 1>&2
+    return 1
   fi
-  return 0
 }
 
-add() {
-  local _NICKNAME=$1 && [[ -n "${_NICKNAME}" ]] && shift
-  local _NEWPATH=$1 && [[ -n "${_NEWPATH}" ]] && shift
-  local _COMMENT="$*"
-  local _LINE=
-  [[ -z "${_NEWPATH}" ]] && _NEWPATH=`pwd`
-  [[ -z "${_NICKNAME}" || -z "${_NEWPATH}" ]] && echo "Error: Add requires a double param of nickname and path." 1>&2 && return 1
-  _LINE="${_NICKNAME} `readlink -f ${_NEWPATH}`"
-  [[ -n "$_COMMENT" ]] && _LINE="${_LINE} # $_COMMENT"
-  echo "${_LINE}" >> ${JUMP_LIST}
-  format
-  return 0
+_trim() {
+  local _BOOKMARK_FILE=$1
+  sed -e "s/[[:space:]]\+/ /g" -e "s/^[[:space:]]*//g" -e "s/[[:space:]]*$//g" $_BOOKMARK_FILE
 }
 
-format() {
-  return 0
+_absolute_path() {
+  readlink -f $1
 }
 
-modified() {
-  echo "true" >> ${MODIFIED_WORKFILE}
-  return 0
-}
+#
+# Main proc.
+#
 
-JUMP_LIST=${JUMP_FILE}
-[[ -z "$JUMP_FILE" ]] && JUMP_LIST=~/.jump
+BOOKMARK_FILE=${JUMP_FILE}  # "JUMP_FILE" is a ENV.
+[[ -z "$BOOKMARK_FILE" ]] && BOOKMARK_FILE=~/.jump
+
 BACKPATH_WORKFILE=~/.jump_backpath
 CDPATH_WORKFILE=~/.jump_cdpath
 MODIFIED_WORKFILE=~/.jump_modified
@@ -190,17 +209,18 @@ echo -n "" > ${BACKPATH_WORKFILE}
 echo -n "" > ${CDPATH_WORKFILE}
 echo -n "" > ${MODIFIED_WORKFILE}
 
-if [ -n "$FLAG_M" ]; then modified;  exit $?; fi
-if [ -n "$FLAG_A" ]; then add $*;    exit $?; fi
-JUMP_TO=$1 && [[ -n "$JUMP_TO" ]] && shift
 if [ -n "$FLAG_V" ]; then version;   exit $?; fi
 if [ -n "$FLAG_U" ]; then usage;     exit $?; fi
+if [ -n "$FLAG_M" ]; then modified;  exit $?; fi
+if [ -n "$FLAG_A" ]; then add $*;    exit $?; fi
 if [ -n "$FLAG_B" ]; then back;      exit $?; fi
-_check_list ${JUMP_LIST} || exit $?
-if [ -n "$FLAG_L" ]; then list ${JUMP_LIST}; exit $?; fi
-if [ -n "$JUMP_TO" ]; then jump ${JUMP_LIST} ${JUMP_TO}; exit $?; fi
 
-list ${JUMP_LIST}
+_exist_listfile ${BOOKMARK_FILE} || exit $?
+if [ -n "$FLAG_L" ]; then list ${BOOKMARK_FILE}; exit $?; fi
+JUMP_TO=$1 && [[ -n "$JUMP_TO" ]] && shift
+if [ -n "$JUMP_TO" ]; then jump ${BOOKMARK_FILE} ${JUMP_TO}; exit $?; fi
+
+list ${BOOKMARK_FILE}
 
 exit 0
 

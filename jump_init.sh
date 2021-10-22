@@ -4,9 +4,13 @@ export JUMP_BACK=
 
 function jump () {
   jump.sh $*
-  [[ -s ~/.jump_backpath ]] && export JUMP_BACK=`cat ~/.jump_backpath`
-  [[ -s ~/.jump_cdpath ]] && eval "cd `cat ~/.jump_cdpath`"
-  [[ -s ~/.jump_modified ]] && ${JUMP_EDITOR} ${JUMP_FILE}
+  local result=$?
+  if [ 0 == $result ]; then
+    [[ -s ~/.jump_backpath ]] && export JUMP_BACK=`cat ~/.jump_backpath`
+    [[ -s ~/.jump_cdpath ]] && eval "cd `cat ~/.jump_cdpath`"
+    [[ -s ~/.jump_modified ]] && ${JUMP_EDITOR} ${JUMP_FILE}
+  fi
+  return $result
 }
 
 alias j="jump"

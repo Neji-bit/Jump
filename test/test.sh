@@ -54,6 +54,14 @@ TOTAL   : `printf '%02d' $TEST_NUM`
 EOF
 }
 
+# prepare check.
+function prepare() {
+  if [ -e "/bin/jump.sh" -a -e "/etc/profile.d/jump_init.sh" ]; then
+    return 0
+  fi
+  return 1
+}
+
 # Initialize.
 function initialize() {
   . /etc/profile.d/jump_init.sh
@@ -156,6 +164,8 @@ function path() {
 # Do the Test.
 #
 
+prepare
+[[ 0 -ne $? ]] && echo "Error. Jump is not installed on this machine." >&2 && exit 1
 initialize
 
 do_test version

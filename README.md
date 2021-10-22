@@ -197,6 +197,11 @@ Jump を使う際は、以下の手順を踏んでください。
 3. 'sudo make uninstall' を実行。
 4. シェルを再起動する。
 
+## Test
+
+インストール後、以下を実行することで機能ごとのテストが実行されます。
+'make test'
+
 ## Contribution
 
 T.B.D.
